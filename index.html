@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kenneth's Curative Extractor</title>
+<meta name="description" content="A local Windows desktop tool that parses title commitment PDFs into a structured summary for title and escrow review.">
+<style>
+  :root{
+    --bg:#0a1424; --panel:#131f33; --panel-2:#0f1a2e; --border:#1e3a5f;
+    --border-b:#2c5a8f; --cyan:#06b6d4; --amber:#f59e0b; --blue:#3b82f6;
+    --red:#dc2626; --green:#16a34a; --purple:#a855f7;
+    --text:#e2e8f0; --muted:#94a3b8; --dim:#64748b;
+    --hl-bg:#1e3a8a; --hl-border:#60a5fa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:#050a15; color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--cyan); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:Consolas,"SF Mono",Menlo,monospace; font-size:.92em;
+       background:#0a1220; padding:1px 5px; border-radius:3px; color:#cbd5e1}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+  section{padding:72px 0; border-bottom:1px solid #0e1a2c}
+  section:last-of-type{border-bottom:0}
+
+  h1{font-size:2.4rem; line-height:1.15; font-weight:800; letter-spacing:-.02em; margin-bottom:12px}
+  h2{font-size:1.6rem; font-weight:700; letter-spacing:-.01em; margin-bottom:8px}
+  h2 .num{color:var(--cyan); font-family:Consolas,monospace; font-size:1rem; margin-right:12px; vertical-align:2px}
+  .lede{color:var(--muted); font-size:1.05rem; max-width:720px; margin-bottom:32px}
+
+  /* ---------- hero ---------- */
+  .hero{padding-top:96px; padding-bottom:64px; border-bottom:1px solid #0e1a2c}
+  .hero .tag{
+    display:inline-block; font-family:Consolas,monospace; font-size:.72rem;
+    color:var(--cyan); text-transform:uppercase; letter-spacing:.16em;
+    margin-bottom:20px; padding:4px 10px; border:1px solid var(--border-b); border-radius:20px;
+  }
+  .hero .sub{color:var(--muted); font-size:1.15rem; max-width:760px; margin-top:20px}
+  .hero .meta{
+    display:flex; gap:20px; flex-wrap:wrap; align-items:center;
+    margin-top:32px; font-family:Consolas,monospace; font-size:.85rem; color:var(--dim);
+  }
+  .hero .meta .dot{color:#1e3a5f}
+
+  .btn-row{display:flex; gap:12px; flex-wrap:wrap; margin-top:36px}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:11px 20px; border-radius:6px;
+    font-weight:600; font-size:.92rem; cursor:pointer;
+    border:1px solid transparent; transition:filter .12s ease, transform .08s ease;
+    font-family:inherit;
+  }
+  .btn:hover{filter:brightness(1.12); text-decoration:none}
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--blue); color:#fff}
+  .btn-ghost{background:transparent; color:var(--text); border-color:var(--border-b)}
+  .btn-ghost:hover{border-color:var(--cyan)}
+
+  /* ---------- demo frame ---------- */
+  .demo{
+    background:var(--bg); border:2px solid var(--border-b); border-radius:10px;
+    overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,.6);
+  }
+  .demo-hint{
+    text-align:center; color:var(--dim); font-size:.8rem;
+    padding:10px; font-family:Consolas,monospace;
+    border-top:1px solid #0e1a2c; background:#08101e;
+  }
+  .demo-hint kbd{background:#1a2538; border:1px solid var(--border);
+                  padding:1px 6px; border-radius:3px; font-family:inherit; font-size:.9em}
+
+  /* top bar */
+  .topbar{
+    display:grid; grid-template-columns:320px 120px 1fr; gap:8px;
+    background:#081020; padding:10px; border-bottom:1px solid var(--border-b);
+  }
+  .left-col{display:flex; flex-direction:column; gap:6px}
+  .chip{
+    border-radius:6px; padding:8px 10px; border:1px solid; color:#fff;
+    font-family:Consolas,monospace; font-weight:700; cursor:pointer;
+    text-align:center; user-select:none; transition:filter .1s;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; white-space:nowrap;
+  }
+  .chip:hover{filter:brightness(1.18)}
+  .chip.copied{filter:brightness(1.4)}
+  .chip-file{background:#0e7490; border-color:var(--cyan); height:40px; font-size:13px}
+  .chip-row{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .chip-dot{background:#7c2d12; border-color:#f97316; height:44px; font-size:13px}
+  .chip-cloud{background:#b45309; border-color:var(--amber); height:44px; font-size:12px}
+
+  .drop-zone{
+    background:var(--blue); border:1px dashed #93c5fd; border-radius:6px;
+    display:flex; align-items:center; justify-content:center; color:#fff;
+    font-weight:800; font-size:12px; letter-spacing:.05em;
+    cursor:pointer; text-align:center; padding:6px;
+  }
+  .drop-zone:hover{filter:brightness(1.1)}
+
+  .right-col{display:flex; flex-direction:column; gap:6px}
+  .btn-row-2{display:grid; grid-template-columns:1fr 1.3fr 1.5fr 0.8fr; gap:6px; height:56px}
+  .btn-mini{
+    border-radius:6px; border:1px solid; color:#fff; font-weight:700; font-size:11px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none; padding:4px; text-align:center; line-height:1.1;
+  }
+  .btn-mini:hover{filter:brightness(1.12)}
+  .btn-clear{background:var(--red); border-color:#f87171}
+  .btn-export{background:var(--green); border-color:#4ade80}
+  .btn-hei{
+    background:#334155; border-color:#64748b; flex-direction:column; gap:2px;
+    padding:4px;
+  }
+  .btn-hei .hi{display:flex; align-items:center; gap:5px; font-size:11px}
+  .btn-hei .mode{font-family:Consolas,monospace; font-size:9px; color:#94a3b8; font-weight:500}
+  .pill{
+    background:var(--purple); border:1px solid #c084fc; border-radius:6px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; cursor:pointer; user-select:none; padding:3px;
+    animation:pulse 1.8s ease-in-out infinite;
+  }
+  .pill .top{font-size:9px; font-weight:700; letter-spacing:.04em}
+  .pill .pct{font-size:14px; font-weight:800; line-height:1}
+  @keyframes pulse{0%,100%{background:var(--purple)}50%{background:#c084fc}}
+
+  .banner{
+    background:#b45309; border:1px solid var(--amber); border-radius:6px;
+    color:#fff; padding:6px 10px; font-size:11px; font-weight:600;
+    display:flex; align-items:center; gap:6px;
+  }
+
+  /* body */
+  .body{
+    padding:10px; display:flex; flex-direction:column; gap:10px;
+    background:var(--bg); min-height:320px;
+  }
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .card{
+    background:var(--panel); border:1px solid var(--border-b); border-radius:6px;
+    overflow:hidden;
+  }
+  .card-head{
+    padding:7px 12px; font-size:11px; font-weight:800; letter-spacing:.06em;
+    color:#fff; text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+    border-bottom:1px solid var(--border-b);
+    font-family:Consolas,monospace;
+  }
+  .card-head.summary{background:linear-gradient(90deg,#0e7490,#0891b2)}
+  .card-head.itemized{background:linear-gradient(90deg,#b45309,#d97706)}
+  .card-head.verbatim{background:linear-gradient(90deg,#0e7490,#22d3ee)}
+  .card-body{padding:6px 0; font-family:Consolas,monospace; font-size:12px; line-height:1.5}
+  .row{
+    padding:3px 14px; cursor:pointer; border-left:3px solid transparent;
+    white-space:pre-wrap; word-break:break-word; color:#cbd5e1;
+  }
+  .row:hover{background:#1a2a44}
+  .row.highlight{background:var(--hl-bg); border-left-color:var(--hl-border); color:#fff}
+  @keyframes flash{0%{background:#064e3b; color:#fff}100%{background:transparent}}
+  .row.flash{animation:flash .35s ease-out}
+
+  /* ---------- design cards ---------- */
+  .choices{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px}
+  .choice{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:22px; cursor:pointer;
+    transition:border-color .15s, transform .1s; position:relative;
+  }
+  .choice:hover{border-color:var(--border-b)}
+  .choice.open{border-color:var(--cyan)}
+  .choice h3{font-size:1rem; font-weight:700; margin-bottom:6px; color:#fff}
+  .choice .kicker{
+    font-family:Consolas,monospace; font-size:.7rem; color:var(--cyan);
+    letter-spacing:.14em; text-transform:uppercase; margin-bottom:10px;
+  }
+  .choice .blurb{color:var(--muted); font-size:.9rem}
+  .choice .detail{
+    color:var(--text); font-size:.88rem; margin-top:14px;
+    padding-top:14px; border-top:1px solid var(--border);
+    display:none;
+  }
+  .choice.open .detail{display:block}
+
+  /* ---------- flow ---------- */
+  .flow{
+    display:flex; align-items:stretch; gap:8px; flex-wrap:wrap;
+    justify-content:center; margin-top:24px;
+  }
+  .step{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:6px; padding:16px 18px; min-width:130px;
+    text-align:center; flex:1 1 130px;
+  }
+  .step .n{
+    font-family:Consolas,monospace; font-size:.7rem; color:var(--cyan);
+    letter-spacing:.14em; margin-bottom:6px;
+  }
+  .step .t{font-size:.85rem; font-weight:600; color:#fff}
+  .arrow{
+    display:flex; align-items:center; color:#2c5a8f;
+    font-family:Consolas,monospace; font-size:1.2rem; padding:0 4px;
+  }
+
+  /* ---------- footer ---------- */
+  footer{padding:56px 0 80px; text-align:center}
+  footer p{color:var(--dim); font-size:.9rem; margin-bottom:20px}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:800px){
+    .topbar{grid-template-columns:1fr; gap:6px}
+    .drop-zone{height:60px}
+    .two-col{grid-template-columns:1fr}
+    h1{font-size:1.8rem}
+    h2{font-size:1.3rem}
+    section{padding:52px 0}
+  }
+  @media (max-width:520px){
+    .btn-row-2{grid-template-columns:1fr 1fr; height:auto}
+    .btn-mini{height:44px}
+    .chip-file{font-size:11px}
+    .chip-dot,.chip-cloud{font-size:11px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <div class="wrap">
+    <div class="tag">Personal Project</div>
+    <h1>Kenneth's Curative Extractor</h1>
+    <p class="sub">
+      A local Windows desktop tool that reads title commitment PDFs and produces a
+      structured, click-to-copy summary for title and escrow review. Everything runs
+      on your machine &mdash; no network, no cloud, no install.
+    </p>
+    <div class="meta">
+      <span>C# .NET 8</span><span class="dot">&bull;</span>
+      <span>WPF</span><span class="dot">&bull;</span>
+      <span>Single-file exe</span><span class="dot">&bull;</span>
+      <span>No admin rights</span>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-ghost" href="#demo">See the demo &darr;</a>
+      <a class="btn btn-ghost" href="https://github.com/firestarterpro" target="_blank" rel="noopener">GitHub &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DEMO ==================== -->
+<section id="demo">
+  <div class="wrap">
+    <h2><span class="num">01</span>Interactive preview</h2>
+    <p class="lede">
+      A live look at the interface. Click the chips to copy their values,
+      flip the HEI/Refi toggle, and click any row to copy it. This is the tool,
+      running in a browser &mdash; the real one is a native Windows app.
+    </p>
+
+    <div class="demo">
+
+      <!-- Top bar -->
+      <div class="topbar">
+        <div class="left-col">
+          <div class="chip chip-file" id="c-file" title="Click to copy">XX-2026-123456-AB</div>
+          <div class="chip-row">
+            <div class="chip chip-dot" id="c-dot" title="Click to copy">3 DOTs $459k</div>
+            <div class="chip chip-cloud" id="c-cloud" title="Click to copy">Cloud $537,289.42</div>
+          </div>
+        </div>
+
+        <div class="drop-zone" id="c-drop">DRAG N DROP<br>or UPLOAD</div>
+
+        <div class="right-col">
+          <div class="btn-row-2">
+            <div class="btn-mini btn-clear">&#10005; Clear</div>
+            <div class="btn-mini btn-export">&#128190; Export</div>
+            <div class="btn-mini btn-hei" id="c-hei" title="Toggle HEI / Refi">
+              <div class="hi">&#9744; HEI/REFI</div>
+              <div class="mode" id="c-mode">REFI Mode</div>
+            </div>
+            <div class="pill" id="c-pill" title="Click to cycle states">
+              <div class="top" id="c-pill-top">Sch A/B</div>
+              <div class="pct" id="c-pill-pct">99%</div>
+            </div>
+          </div>
+          <div class="banner">&#128196; Tax cert not uploaded &mdash; drop a 2nd PDF anytime</div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="body">
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head summary">&#128203; Summary</div>
+            <div class="card-body">
+              <div class="row" id="demo-summary">Vesting: same
+2 DOTs [1 HUD], 1 Lien, 1 UCC, 1 Common Name
+Taxes: Pending</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head itemized">&#9888;&#65039; Itemized Restrictions</div>
+            <div class="card-body">
+              <div class="row">Lien $125k - Wells Fargo</div>
+              <div class="row">UCC - Tesla</div>
+              <div class="row">Common Name - John Swele Smith</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head verbatim">&#128196; Schedule B Verbatim</div>
+          <div class="card-body" id="demo-verbatim">
+            <div class="row">1. Deed of Trust to secure an original indebtedness of $412,500.00 recorded on January...</div>
+            <div class="row">3. Deed of Trust in favor of Secretary of Housing and Urban Development, recorded on...</div>
+            <div class="row">4. Notice of Federal Tax Lien in the amount of $125,400.00 in favor of the Internal Revenue...</div>
+            <div class="row">5. UCC Financing Statement naming Tesla Energy Operations, Inc. as Secured Party covering...</div>
+            <div class="row">6. Affidavit of Uninsured Deed executed by John Swele Smith, dated October 4, 2024...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-hint">
+        Click a row to copy &middot; HEI toggle swaps the first DOT in place, no re-parse &middot; pill cycles states
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DESIGN CHOICES ==================== -->
+<section id="choices">
+  <div class="wrap">
+    <h2><span class="num">02</span>Design choices</h2>
+    <p class="lede">
+      The interesting part of this project isn't the parsing &mdash; it's the decisions
+      about what the tool should <em>not</em> do. Click a card to read more.
+    </p>
+
+    <div class="choices">
+      <div class="choice" data-open="0">
+        <div class="kicker">Constraint</div>
+        <h3>Local-first by design</h3>
+        <p class="blurb">No network, no telemetry, no auto-update.</p>
+        <div class="detail">
+          The tool reads only the file you drop on it and writes only the export
+          next to the source. Nothing else touches disk. No registry writes, no
+          background service, no subprocess. Files never leave the machine &mdash;
+          because they can't.
+        </div>
+      </div>
+
+      <div class="choice" data-open="1">
+        <div class="kicker">Trust</div>
+        <h3>Fidelity scoring</h3>
+        <p class="blurb">The tool tells you when it isn't sure.</p>
+        <div class="detail">
+          Every parse produces a confidence score based on how much of the source
+          the classifier understood versus silently skipped. Below 99%, the score
+          is clickable and drills into the specific items that were flagged.
+          Reviewers know exactly when to double-check before trusting the output.
+        </div>
+      </div>
+
+      <div class="choice" data-open="2">
+        <div class="kicker">Engineering</div>
+        <h3>HEI/Refi toggle without re-parsing</h3>
+        <p class="blurb">Both report variants, computed once.</p>
+        <div class="detail">
+          The Home-Equity workflow hides the first deed of trust from the verbatim
+          list. Instead of re-reading the PDF when the toggle flips, the parser
+          computes both views up front and the UI swaps between them instantly.
+          Same input, two reports, zero duplicate work.
+        </div>
+      </div>
+
+      <div class="choice" data-open="3">
+        <div class="kicker">Discipline</div>
+        <h3>Four bugs fixed from the prototype</h3>
+        <p class="blurb">Found by testing against real commitments.</p>
+        <div class="detail">
+          The Python prototype was ported for parity, then hardened. Amounts
+          ending in <code>.00.</code> no longer split into phantom items.
+          The word "Hudson" no longer counts as HUD. "Heirs" no longer trips the
+          IRS detector. Scanned PDFs now warn instead of showing a false all-clear.
+        </div>
+      </div>
+
+      <div class="choice" data-open="4">
+        <div class="kicker">Environment</div>
+        <h3>Built for IT review</h3>
+        <p class="blurb">The constraints were designed in, not bolted on.</p>
+        <div class="detail">
+          Self-contained single-file exe. <code>asInvoker</code> manifest &mdash;
+          no admin prompt. No registry writes. No logs, no cache, no background
+          service. Bundle is signed off with a hash and a clean Defender scan.
+          Submitted to internal IT for approval.
+        </div>
+      </div>
+
+      <div class="choice" data-open="5">
+        <div class="kicker">Usability</div>
+        <h3>Click-to-copy, everywhere</h3>
+        <p class="blurb">Built for people who paste into case management systems all day.</p>
+        <div class="detail">
+          Every line in the report is one click from the clipboard. Arrow keys
+          navigate, Enter or Space copies the highlighted row. The top-bar chips
+          copy too &mdash; file number, DOT total, cloud total. No selecting, no
+          Ctrl+C, no fiddling.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FLOW ==================== -->
+<section id="flow">
+  <div class="wrap">
+    <h2><span class="num">03</span>How it works</h2>
+    <p class="lede">
+      One file in, one report out. Everything in between is deterministic
+      pattern matching &mdash; no models, no cloud, no guessing.
+    </p>
+
+    <div class="flow">
+      <div class="step"><div class="n">STEP 1</div><div class="t">Load PDF</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="step"><div class="n">STEP 2</div><div class="t">Find Schedule B, Part II</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="step"><div class="n">STEP 3</div><div class="t">Classify each exception</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="step"><div class="n">STEP 4</div><div class="t">Extract amounts &amp; parties</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="step"><div class="n">STEP 5</div><div class="t">Score &amp; render report</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer>
+  <div class="wrap">
+    <p>Source is available on request.</p>
+    <a class="btn btn-primary" href="https://github.com/firestarterpro" target="_blank" rel="noopener">
+      github.com/firestarterpro &rarr;
+    </a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // ---- design card toggle ----
+  document.querySelectorAll('.choice').forEach(function(c){
+    c.addEventListener('click', function(){
+      var isOpen = c.classList.contains('open');
+      document.querySelectorAll('.choice').forEach(function(x){ x.classList.remove('open'); });
+      if (!isOpen) c.classList.add('open');
+    });
+  });
+
+  // ---- chip copy ----
+  function wireCopy(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', function(){
+      try{ navigator.clipboard.writeText(el.textContent.trim()); }catch(e){}
+      el.classList.add('copied');
+      setTimeout(function(){ el.classList.remove('copied'); }, 220);
+    });
+  }
+  ['c-file','c-dot','c-cloud'].forEach(wireCopy);
+
+  // ---- row copy + flash ----
+  document.querySelectorAll('.row').forEach(function(r){
+    r.addEventListener('click', function(){
+      try{ navigator.clipboard.writeText(r.textContent); }catch(e){}
+      r.classList.remove('flash');
+      void r.offsetWidth;
+      r.classList.add('flash');
+    });
+  });
+
+  // ---- HEI / Refi toggle ----
+  var hei = document.getElementById('c-hei');
+  var mode = document.getElementById('c-mode');
+  var verbatim = document.getElementById('demo-verbatim');
+  var heiOn = false;
+  var originalFirst = null;
+
+  hei.addEventListener('click', function(){
+    heiOn = !heiOn;
+    mode.textContent = heiOn ? 'HEI Mode' : 'REFI Mode';
+    var first = verbatim.querySelector('.row');
+    if (!first) return;
+    if (heiOn){
+      if (!originalFirst){ originalFirst = first.innerHTML; }
+      first.innerHTML = '1st Lien DOT Omitted &#128711; Home-Equity Workflow &#128711;';
+    } else if (originalFirst) {
+      first.innerHTML = originalFirst;
+    }
+  });
+
+  // ---- pill cycling ----
+  var pill = document.getElementById('c-pill');
+  var pillTop = document.getElementById('c-pill-top');
+  var pillPct = document.getElementById('c-pill-pct');
+  var states = [
+    {top:'Sch A/B', pct:'99%', bg:'#a855f7', pulse:true},
+    {top:'Cookin\'', pct:'...', bg:'#f59e0b', pulse:true},
+    {top:'Slayed', pct:'\u2713', bg:'#10b981', pulse:false},
+    {top:'Sch B', pct:'87%', bg:'#f59e0b', pulse:true},
+    {top:'Oof', pct:'!', bg:'#7f1d1d', pulse:false}
+  ];
+  var idx = 0;
+  function applyPill(i){
+    var s = states[i % states.length];
+    pill.style.background = s.bg;
+    pill.style.animation = s.pulse ? 'pulse 1.8s ease-in-out infinite' : 'none';
+    pillTop.textContent = s.top;
+    pillPct.textContent = s.pct;
+  }
+  pill.addEventListener('click', function(){ applyPill(++idx); });
+
+  // ---- drop zone → "upload" behavior is stubbed for privacy ----
+  var drop = document.getElementById('c-drop');
+  drop.addEventListener('click', function(){
+    drop.textContent = 'Demo only';
+    setTimeout(function(){ drop.innerHTML = 'DRAG N DROP<br>or UPLOAD'; }, 1200);
+  });
+})();
+</script>
+
+</body>
+</html>
